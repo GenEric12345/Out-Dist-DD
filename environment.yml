@@ -91,7 +91,7 @@ dependencies:
     - einops==0.7.0
     - fancy-einsum==0.0.3
     - filelock==3.9.0
-    - flash-attn==2.2.2
+    #- flash-attn==2.2.2
     - frozenlist==1.4.1
     - fsspec==2023.10.0
     - gitdb==4.0.11
@@ -135,9 +135,9 @@ dependencies:
     - submitit==1.5.1
     - sympy==1.12
     - tokenizers==0.15.2
-    - torch==2.0.1+cu118
-    - torchaudio==2.0.2+cu118
-    - torchvision==0.15.2+cu118
+    - torch==2.0.1
+    - torchaudio==2.0.2
+    - torchvision==0.15.2
     - tqdm==4.66.2
     - transformer-lens==1.14.0
     - transformers==4.38.1
