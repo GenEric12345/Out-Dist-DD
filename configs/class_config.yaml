@@ -1,0 +1,31 @@
+vocab_size: 505257
+embedding_dim: 100
+hidden_dim: 128
+num_classes: 2
+num_epochs: 10
+learning_rate: 0.001
+ngpus: 1
+
+
+training:
+  batch_size: 512
+  accum: 1
+  n_iters: 1300001
+  snapshot_freq: 50000
+  log_freq: 50
+  eval_freq: 100
+  snapshot_freq_for_preemption: 10000
+  weight: standard
+  snapshot_sampling: True
+  ema: 0.9999
+eval:
+  batch_size: 32
+
+data:
+  train1: wikitext103
+  train2: wikitext2
+  cache_dir: ./cache_dir
+  valid: wikitext103
+
+model:
+  length: 1024
