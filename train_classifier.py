@@ -4,7 +4,6 @@ import torch.nn as nn
 from data import get_dataloaders_mixed
 from omegaconf import OmegaConf
 import os
-from torch.nn.parallel import DistributedDataParallel as DDP
 import noise_lib
 
 import graph_lib
@@ -13,6 +12,7 @@ import graph_lib
 config = OmegaConf.load('configs/class_config.yaml')
 
 def train(cfg):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = TextClassifier(cfg.vocab_size, cfg.embedding_dim, cfg.hidden_dim, cfg.num_classes)
 
@@ -24,7 +24,6 @@ def train(cfg):
     train_loader, valid_loader= get_dataloaders_mixed(cfg)
 
     noise = noise_lib.get_noise(cfg).to(device)
-    noise = DDP(noise, device_ids=[rank], static_graph=True)
 
     graph = graph_lib.get_graph(cfg, device)
     best_loss = 100
@@ -47,16 +46,20 @@ def train(cfg):
         for batch in train_loader:
             optimizer.zero_grad()
             tokens = batch['input_ids']
-            tokens = torch.LongTensor(tokens)
+            tokens = torch.LongTensor(tokens).to(device)
             ##NOISE TOKENS
             sampling_eps = 1e-3
-            t = (1 - sampling_eps) * torch.rand(batch.shape[0], device=batch.device) + sampling_eps
+            t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
 
             sigma, dsigma = noise(t)
-
             tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
+
+            print(tokens_noisy.min(), tokens_noisy.max())
+            print(model.encoder.wte.weight.shape)
+
             targets = batch['source']
-            targets = torch.LongTensor(targets)
+            targets = torch.LongTensor(targets).to(device)
+
             outputs = model(tokens_noisy, t)
             loss = criterion(outputs.view(-1, 2), targets.view(-1))
             loss.backward()
@@ -81,9 +84,16 @@ def train(cfg):
         with torch.no_grad():
             for batch in valid_loader:
                 targets = batch["input_ids"]
-                targets = torch.LongTensor(targets)
+                targets = torch.LongTensor(targets).to(device)
+                ##NOISE TOKENS
+                sampling_eps = 1e-3
+                t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
+
+                sigma, dsigma = noise(t)
+
+                tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
                 tokens = batch["text"]
-                tokens = torch.LongTensor(tokens)
+                tokens = torch.LongTensor(tokens).to(device)
                 outputs = model(tokens)
                 val_loss = criterion(outputs.view(-1, 2), targets.view(-1))
 

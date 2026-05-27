@@ -5,7 +5,7 @@ num_classes: 2
 num_epochs: 10
 learning_rate: 0.001
 ngpus: 1
-
+tokens: 50256
 
 training:
   batch_size: 512
@@ -29,3 +29,13 @@ data:
 
 model:
   length: 512
+
+noise:
+  type: loglinear
+  sigma_min: 1e-4
+  sigma_max: 20
+
+graph:
+  type: absorb
+  file: data
+  report_all: False
