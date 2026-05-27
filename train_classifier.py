@@ -14,7 +14,7 @@ config = OmegaConf.load('configs/class_config.yaml')
 def train(cfg):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = TextClassifier(cfg.vocab_size, cfg.embedding_dim, cfg.hidden_dim, cfg.num_classes)
+    model = TextClassifier(cfg.vocab_size, cfg.embedding_dim, cfg.hidden_dim, cfg.num_classes).to(device)
 
     # Define the loss function and optimizer
     criterion = nn.CrossEntropyLoss()
