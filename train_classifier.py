@@ -5,7 +5,7 @@ from data import get_dataloaders_mixed
 from omegaconf import OmegaConf
 import os
 import noise_lib
-
+from tqdm import tqdm
 import graph_lib
 
 
@@ -43,7 +43,8 @@ def train(cfg):
         model.train()
         total_loss = 0.0
         total_samples = 0
-        for batch in train_loader:
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+0}/{cfg.num_epochs}")
+        for batch in pbar:
             optimizer.zero_grad()
             tokens = batch['input_ids']
             tokens = torch.LongTensor(tokens).to(device)
