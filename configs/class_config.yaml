@@ -28,4 +28,4 @@ data:
   valid: wikitext103
 
 model:
-  length: 1024
+  length: 512

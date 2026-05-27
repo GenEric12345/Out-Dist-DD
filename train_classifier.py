@@ -3,6 +3,7 @@ from model import TextClassifier
 import torch.nn as nn
 from data import get_dataloaders_mixed
 from omegaconf import OmegaConf
+import os
 
 config = OmegaConf.load('configs/class_config.yaml')
 
@@ -16,23 +17,31 @@ def train(cfg):
 
     # Create data loaders for the training and validation sets
     train_loader, valid_loader= get_dataloaders_mixed(cfg)
-
+    
+    best_loss = 100
     # Iterate over the training data for the specified number of epochs
-    for epoch in range(cfg.num_epochs):
+
+    start_epoch = 0
+    latest_path = f"checkpoints/latest.pt"
+
+    if os.path.exists(latest_path):
+        checkpoint = torch.load(latest_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        print(f"Resuming from epoch {start_epoch}")
+
+    for epoch in range(start_epoch, cfg.num_epochs):
         model.train()
         total_loss = 0.0
         total_samples = 0
         for batch in train_loader:
             optimizer.zero_grad()
-            print(batch.keys())
             tokens = batch['input_ids']
             tokens = torch.LongTensor(tokens)
             targets = batch['source']
             targets = torch.LongTensor(targets)
             outputs = model(tokens)
-            print(tokens.size())
-            print(outputs.size())
-            print(targets.size())
             loss = criterion(outputs.view(-1, 2), targets.view(-1))
             loss.backward()
             optimizer.step()
@@ -42,6 +51,13 @@ def train(cfg):
             print(total_loss/total_samples)
         print('Epoch ' + epoch + ': Loss' + (total_loss/total_samples))
 
+        #Save Checkpoint
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': total_loss,
+        }, f"checkpoints/checkpoint_epoch_{epoch}.pt")
         # Evaluate on the validation set after every epoch
         model.eval()
         total_val_loss = 0.0
@@ -60,6 +76,10 @@ def train(cfg):
 
         avg_loss = total_loss / total_samples
         avg_val_loss = total_val_loss / total_val_samples
+
+        if avg_val_loss < best_loss:
+            best_loss = avg_val_loss
+            torch.save(model.state_dict(), f"checkpoints/best.pt")
 
         print(f"Epoch {epoch+1}/{cfg.num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
 
