@@ -22,8 +22,8 @@ eval:
   batch_size: 32
 
 data:
-  train1: shakespear
-  train2: bible
+  train1: shakespeare
+  train2: ptb
   cache_dir: ./cache_dir
   valid: wikitext103
 

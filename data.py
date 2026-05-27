@@ -127,8 +127,6 @@ def get_dataset(name, mode, cache_dir=None, block_size=1024, num_proc=8):
         dataset = get_lambada_test_dataset()
     elif name == "shakespeare":
         dataset = load_dataset("tiny_shakespeare", cache_dir=cache_dir)
-    elif name == "bible":
-        dataset = load_dataset("osyvokon/kjv-bible", cache_dir=cache_dir)
     else:
         dataset = load_dataset(name, cache_dir=cache_dir)
 
@@ -266,8 +264,6 @@ def get_dataset_mixed(name1, name2, mode, cache_dir=None, block_size=1024, num_p
             dataset = get_lambada_test_dataset()
         elif name == "shakespeare":
             dataset = load_dataset("tiny_shakespeare", cache_dir=cache_dir)
-        elif name == "bible":
-            dataset = load_dataset("osyvokon/kjv-bible", cache_dir=cache_dir)
         else:
             dataset = load_dataset(name, cache_dir=cache_dir)
 
