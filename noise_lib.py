@@ -70,4 +70,3 @@ class LogLinearNoise(Noise, nn.Module):
 
     def total_noise(self, t):
         return -torch.log1p(-(1 - self.eps) * t)
-
