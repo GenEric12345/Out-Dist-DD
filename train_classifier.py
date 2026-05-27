@@ -4,6 +4,11 @@ import torch.nn as nn
 from data import get_dataloaders_mixed
 from omegaconf import OmegaConf
 import os
+from torch.nn.parallel import DistributedDataParallel as DDP
+import noise_lib
+
+import graph_lib
+
 
 config = OmegaConf.load('configs/class_config.yaml')
 
@@ -17,7 +22,11 @@ def train(cfg):
 
     # Create data loaders for the training and validation sets
     train_loader, valid_loader= get_dataloaders_mixed(cfg)
-    
+
+    noise = noise_lib.get_noise(cfg).to(device)
+    noise = DDP(noise, device_ids=[rank], static_graph=True)
+
+    graph = graph_lib.get_graph(cfg, device)
     best_loss = 100
     # Iterate over the training data for the specified number of epochs
 
@@ -39,9 +48,16 @@ def train(cfg):
             optimizer.zero_grad()
             tokens = batch['input_ids']
             tokens = torch.LongTensor(tokens)
+            ##NOISE TOKENS
+            sampling_eps = 1e-3
+            t = (1 - sampling_eps) * torch.rand(batch.shape[0], device=batch.device) + sampling_eps
+
+            sigma, dsigma = noise(t)
+
+            tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
             targets = batch['source']
             targets = torch.LongTensor(targets)
-            outputs = model(tokens)
+            outputs = model(tokens_noisy, t)
             loss = criterion(outputs.view(-1, 2), targets.view(-1))
             loss.backward()
             optimizer.step()
