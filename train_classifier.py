@@ -8,7 +8,7 @@ import noise_lib
 from tqdm import tqdm
 import graph_lib
 
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 config = OmegaConf.load('configs/class_config.yaml')
 
 def train(cfg):
@@ -29,86 +29,93 @@ def train(cfg):
     best_loss = 100
     # Iterate over the training data for the specified number of epochs
 
-    start_epoch = 0
+    start_step = 0
     latest_path = f"checkpoints/latest.pt"
 
     if os.path.exists(latest_path):
         checkpoint = torch.load(latest_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint['epoch'] + 1
+        start_step = checkpoint['step'] + 1
         print(f"Resuming from epoch {start_epoch}")
 
-    for epoch in range(start_epoch, cfg.num_epochs):
+    for step in range(start_step, cfg.training.num_training_steps):
         model.train()
         total_loss = 0.0
         total_samples = 0
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+0}/{cfg.num_epochs}")
-        for batch in pbar:
-            optimizer.zero_grad()
-            tokens = batch['input_ids']
-            tokens = torch.LongTensor(tokens).to(device)
-            ##NOISE TOKENS
-            sampling_eps = 1e-3
-            t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
+        
+        
+        batch = next(train_loader)
+        optimizer.zero_grad()
+        tokens = batch['input_ids']
+        tokens = torch.LongTensor(tokens).to(device)
+        ##NOISE TOKENS
+        sampling_eps = 1e-3
+        t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
 
-            sigma, dsigma = noise(t)
-            tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
+        sigma, dsigma = noise(t)
+        tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
 
-            print(tokens_noisy.min(), tokens_noisy.max())
-            print(model.encoder.wte.weight.shape)
 
-            targets = batch['source']
-            targets = torch.LongTensor(targets).to(device)
+        targets = batch['source']
+        targets = torch.LongTensor(targets).to(device)
 
-            outputs = model(tokens_noisy, t)
-            loss = criterion(outputs.view(-1, 2), targets.view(-1))
-            loss.backward()
-            optimizer.step()
+        outputs = model(tokens_noisy, t)
+        loss = criterion(outputs.view(-1, 2), targets.view(-1))
+        loss.backward()
+        optimizer.step()
 
-            total_loss += loss.item() * len(tokens)
-            total_samples += len(tokens)
-            print(total_loss/total_samples)
-        print('Epoch ' + epoch + ': Loss' + (total_loss/total_samples))
-
+        total_loss += loss.item() * len(tokens)
+        total_samples += len(tokens)
+        if(step % 50 == 0):
+            print('Step: ' + str(step) + ': Loss ' + str(total_loss/total_samples))
         #Save Checkpoint
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': total_loss,
-        }, f"checkpoints/checkpoint_epoch_{epoch}.pt")
-        # Evaluate on the validation set after every epoch
-        model.eval()
-        total_val_loss = 0.0
-        total_val_samples = 0
-        with torch.no_grad():
-            for batch in valid_loader:
-                targets = batch["input_ids"]
-                targets = torch.LongTensor(targets).to(device)
-                ##NOISE TOKENS
-                sampling_eps = 1e-3
-                t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
+        if(step % cfg.eval.checkpoint_every == 0):
+            torch.save({
+                'step': step,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': total_loss,
+            }, f"checkpoints/checkpoint_steps_{step}.pt")
+            # Evaluate on the validation set after every epoch
+        
 
-                sigma, dsigma = noise(t)
 
-                tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
-                tokens = batch["text"]
-                tokens = torch.LongTensor(tokens).to(device)
-                outputs = model(tokens)
-                val_loss = criterion(outputs.view(-1, 2), targets.view(-1))
+        if(step % cfg.eval.every == 0):
 
-                total_val_loss += val_loss.item() * len(tokens)
-                total_val_samples += len(tokens)
+            model.eval()
+            total_val_loss = 0.0
+            total_val_samples = 0
+            with torch.no_grad():
+                for eval_step in range(cfg.eval.steps):
+                    batch = next(valid_loader)
 
-        avg_loss = total_loss / total_samples
-        avg_val_loss = total_val_loss / total_val_samples
+                    tokens = batch["input_ids"]
+                    tokens = torch.LongTensor(tokens).to(device)
+                    ##NOISE TOKENS
+                    sampling_eps = 1e-3
+                    t = (1 - sampling_eps) * torch.rand(tokens.shape[0], device=device) + sampling_eps
 
-        if avg_val_loss < best_loss:
-            best_loss = avg_val_loss
-            torch.save(model.state_dict(), f"checkpoints/best.pt")
+                    sigma, dsigma = noise(t)
 
-        print(f"Epoch {epoch+1}/{cfg.num_epochs}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
+                    tokens_noisy = graph.sample_transition(tokens, sigma[:, None])
+                    targets = batch["source"]
+                    targets = torch.LongTensor(targets).to(device)
+                    outputs = model(tokens_noisy, t)
+                    val_loss = criterion(outputs.view(-1, 2), targets.view(-1))
+
+                    total_val_loss += val_loss.item() * len(tokens)
+                    total_val_samples += len(tokens)
+
+            avg_loss = total_loss / total_samples
+            avg_val_loss = total_val_loss / total_val_samples
+            
+            if(step % cfg.eval.checkpoint_every):
+                if avg_val_loss < best_loss:
+                    best_loss = avg_val_loss
+                    torch.save(model.state_dict(), f"checkpoints/best.pt")
+
+                print(f"Steps {step+1}/{cfg.training.num_training_steps}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
 
 if __name__ == '__main__':
     print('good')

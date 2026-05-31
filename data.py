@@ -374,7 +374,16 @@ def get_dataloaders_mixed(config, distributed=False):
         train_sampler = None
         test_sampler = None
 
-    train_loader = cycle_loader(DataLoader(
+    #train_loader = cycle_loader(DataLoader(
+    #    train_set,
+    #    batch_size=config.training.batch_size // (config.ngpus * config.training.accum),
+    #    sampler=train_sampler,
+    #    num_workers=4,
+    #    pin_memory=True,
+    #    shuffle=(train_sampler is None),
+    #    persistent_workers=True,
+    #))
+    interm_loader = DataLoader(
         train_set,
         batch_size=config.training.batch_size // (config.ngpus * config.training.accum),
         sampler=train_sampler,
@@ -382,7 +391,10 @@ def get_dataloaders_mixed(config, distributed=False):
         pin_memory=True,
         shuffle=(train_sampler is None),
         persistent_workers=True,
-    ))
+    )
+
+    train_loader = cycle_loader(interm_loader)
+    print(len(interm_loader))
     valid_loader = cycle_loader(DataLoader(
         valid_set,
         batch_size=config.eval.batch_size // (config.ngpus * config.training.accum),
@@ -392,3 +404,4 @@ def get_dataloaders_mixed(config, distributed=False):
         shuffle=(test_sampler is None),
     ))
     return train_loader, valid_loader
+

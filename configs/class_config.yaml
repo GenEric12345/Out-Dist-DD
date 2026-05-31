@@ -18,8 +18,12 @@ training:
   weight: standard
   snapshot_sampling: True
   ema: 0.9999
+  num_training_steps: 50000
 eval:
   batch_size: 32
+  every: 50
+  checkpoint_every: 200
+  steps: 100
 
 data:
   train1: shakespeare
@@ -28,7 +32,7 @@ data:
   valid: wikitext103
 
 model:
-  length: 512
+  length: 256
 
 noise:
   type: loglinear
