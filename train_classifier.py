@@ -113,8 +113,13 @@ def train(cfg):
             if(step % cfg.eval.checkpoint_every):
                 if avg_val_loss < best_loss:
                     best_loss = avg_val_loss
-                    torch.save(model.state_dict(), f"checkpoints/best.pt")
 
+                    torch.save({
+                        'step': step,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'loss': total_loss,
+                    }, f"checkpoints/best.pt")
                 print(f"Steps {step+1}/{cfg.training.num_training_steps}, Train Loss: {avg_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
 
 if __name__ == '__main__':
