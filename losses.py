@@ -18,9 +18,9 @@ def get_loss_fn(noise, graph, train, sampling_eps=1e-3, lv=False):
                 raise NotImplementedError("Yeah I gotta do this later")
             else:
                 t = (1 - sampling_eps) * torch.rand(batch.shape[0], device=batch.device) + sampling_eps
-            
+
         sigma, dsigma = noise(t)
-        
+
         if perturbed_batch is None:
             perturbed_batch = graph.sample_transition(batch, sigma[:, None])
 
@@ -34,6 +34,34 @@ def get_loss_fn(noise, graph, train, sampling_eps=1e-3, lv=False):
 
     return loss_fn
 
+
+def get_loss_fn_OOD(noise, graph, train, sampling_eps=1e-3, lv=False):
+
+    def loss_fn(model, batch, t_min, cond=None, t=None, perturbed_batch=None):
+        """
+        Batch shape: [B, L] int. D given from graph
+        """
+
+        if t is None:
+            if lv:
+                raise NotImplementedError("Yeah I gotta do this later")
+            else:
+                t = (1 - sampling_eps) * torch.rand(batch.shape[0], device=batch.device) + (sampling_eps+t_min)
+
+        sigma, dsigma = noise(t)
+
+        if perturbed_batch is None:
+            perturbed_batch = graph.sample_transition(batch, sigma[:, None])
+
+        log_score_fn = mutils.get_score_fn(model, train=train, sampling=False)
+        log_score = log_score_fn(perturbed_batch, sigma)
+        loss = graph.score_entropy(log_score, sigma[:, None], perturbed_batch, batch)
+
+        loss = (dsigma[:, None] * loss).sum(dim=-1)
+
+        return loss
+
+    return loss_fn
 
 def get_optimizer(config, params):
     if config.optim.optimizer == 'Adam':
@@ -52,10 +80,10 @@ def get_optimizer(config, params):
 def optimization_manager(config):
     """Returns an optimize_fn based on `config`."""
 
-    def optimize_fn(optimizer, 
-                    scaler, 
-                    params, 
-                    step, 
+    def optimize_fn(optimizer,
+                    scaler,
+                    params,
+                    step,
                     lr=config.optim.lr,
                     warmup=config.optim.warmup,
                     grad_clip=config.optim.grad_clip):
@@ -81,7 +109,7 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
     total_loss = 0
 
     def step_fn(state, batch, cond=None):
-        nonlocal accum_iter 
+        nonlocal accum_iter
         nonlocal total_loss
 
         model = state['model']
@@ -90,7 +118,7 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
             optimizer = state['optimizer']
             scaler = state['scaler']
             loss = loss_fn(model, batch, cond=cond).mean() / accum
-            
+
             scaler.scale(loss).backward()
 
             accum_iter += 1
@@ -102,7 +130,50 @@ def get_step_fn(noise, graph, train, optimize_fn, accum):
                 optimize_fn(optimizer, scaler, model.parameters(), step=state['step'])
                 state['ema'].update(model.parameters())
                 optimizer.zero_grad()
-                
+
+                loss = total_loss
+                total_loss = 0
+        else:
+            with torch.no_grad():
+                ema = state['ema']
+                ema.store(model.parameters())
+                ema.copy_to(model.parameters())
+                loss = loss_fn(model, batch, cond=cond).mean()
+                ema.restore(model.parameters())
+
+        return loss
+
+    return step_fn
+
+def get_step_fn_OOD(noise, graph, train, optimize_fn, accum):
+    loss_fn = get_loss_fn_OOD(noise, graph, train)
+
+    accum_iter = 0
+    total_loss = 0
+
+    def step_fn(state, batch, t_min, cond=None):
+        nonlocal accum_iter
+        nonlocal total_loss
+
+        model = state['model']
+
+        if train:
+            optimizer = state['optimizer']
+            scaler = state['scaler']
+            loss = loss_fn(model, batch, t_min, cond=cond).mean() / accum
+
+            scaler.scale(loss).backward()
+
+            accum_iter += 1
+            total_loss += loss.detach()
+            if accum_iter == accum:
+                accum_iter = 0
+
+                state['step'] += 1
+                optimize_fn(optimizer, scaler, model.parameters(), step=state['step'])
+                state['ema'].update(model.parameters())
+                optimizer.zero_grad()
+
                 loss = total_loss
                 total_loss = 0
         else:
